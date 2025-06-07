@@ -1,32 +1,60 @@
-# Development and testing dependencies
-pytest==7.4.2
-pytest-cov==4.1.0
-pytest-mock==3.11.1
-pytest-asyncio==0.21.1
-coverage==7.3.2
-black==23.9.1
-flake8==6.1.0
-mypy==1.6.1
-isort==5.12.0
-pre-commit==3.5.0
+# Development dependencies
+-r requirements.txt
 
-# Performance monitoring
-psutil==5.9.6
+# Testing frameworks
+pytest>=7.4.0
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+pytest-xdist>=3.3.1
+pytest-html>=3.2.0
 
-# Additional testing utilities
-factory-boy==3.3.0
-freezegun==1.2.2
-responses==0.23.3
+# Code formatting and linting
+black>=23.7.0
+flake8>=6.0.0
+isort>=5.12.0
+mypy>=1.5.1
+pre-commit>=3.3.3
+
+# Security and quality
+bandit>=1.7.5
+safety>=2.3.5
+vulture>=2.9.1
 
 # Documentation
-sphinx==7.2.6
-sphinx-rtd-theme==1.3.0
+sphinx>=7.1.2
+sphinx-rtd-theme>=1.3.0
+myst-parser>=2.0.0
 
-# Visualization (optional)
-matplotlib==3.8.0
-seaborn==0.13.0
-plotly==5.17.0
+# Development tools
+ipython>=8.14.0
+jupyter>=1.0.0
+notebook>=7.0.0
 
-# Excel export (optional)
-openpyxl==3.1.2
-xlsxwriter==3.1.9
+# Performance profiling
+memory-profiler>=0.61.0
+line-profiler>=4.1.1
+py-spy>=0.3.14
+
+# Database tools
+sqlite-utils>=3.34.0
+
+# API testing
+httpx>=0.24.1
+requests-mock>=1.11.0
+
+# Load testing
+locust>=2.16.1
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Build tools
+build>=0.10.0
+twine>=4.0.2
+wheel>=0.41.0
+
+# Type checking
+types-requests>=2.31.0
+types-PyYAML>=6.0.12
+types-python-dateutil>=2.8.19

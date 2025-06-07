@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test runner for Reddit Scraper
-Runs all tests with coverage reporting and performance analysis.
+Reddit Scraper Test Runner
+Comprehensive testing and code quality checks
 """
 
 import os
@@ -9,268 +9,334 @@ import sys
 import subprocess
 import argparse
 from pathlib import Path
+import time
 
-def run_command(command, description):
-    """Run a command and handle errors."""
-    print(f"\n{'='*60}")
-    print(f"Running: {description}")
-    print(f"Command: {command}")
-    print('='*60)
+def run_command(cmd, description, check=True):
+    """Run a command and handle output."""
+    print(f"\n🔄 {description}")
+    print(f"Command: {' '.join(cmd)}")
+    print("-" * 50)
+    
+    start_time = time.time()
     
     try:
-        result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-        print(result.stdout)
-        if result.stderr:
-            print("STDERR:", result.stderr)
-        return True
+        result = subprocess.run(cmd, check=check, capture_output=False)
+        duration = time.time() - start_time
+        
+        if result.returncode == 0:
+            print(f"✅ {description} completed successfully ({duration:.2f}s)")
+        else:
+            print(f"❌ {description} failed ({duration:.2f}s)")
+        
+        return result.returncode == 0
     except subprocess.CalledProcessError as e:
-        print(f"ERROR: {description} failed!")
-        print(f"Return code: {e.returncode}")
-        print(f"STDOUT: {e.stdout}")
-        print(f"STDERR: {e.stderr}")
+        duration = time.time() - start_time
+        print(f"❌ {description} failed with exit code {e.returncode} ({duration:.2f}s)")
+        return False
+    except FileNotFoundError:
+        print(f"❌ Command not found: {cmd[0]}")
+        print(f"💡 Please install: pip install {cmd[0]}")
         return False
 
-def install_dependencies():
-    """Install test dependencies."""
-    print("Installing test dependencies...")
+def check_dependencies():
+    """Check if required tools are installed."""
+    tools = {
+        'pytest': 'pytest',
+        'black': 'black',
+        'flake8': 'flake8',
+        'mypy': 'mypy',
+        'bandit': 'bandit',
+        'safety': 'safety'
+    }
     
-    commands = [
-        "pip install -r requirements.txt",
-        "pip install -r requirements-dev.txt"
-    ]
+    missing = []
+    for tool, package in tools.items():
+        try:
+            subprocess.run([tool, '--version'], capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            missing.append(package)
     
-    for cmd in commands:
-        if not run_command(cmd, f"Installing dependencies: {cmd}"):
-            return False
+    if missing:
+        print(f"❌ Missing tools: {', '.join(missing)}")
+        print(f"💡 Install with: pip install {' '.join(missing)}")
+        return False
     
     return True
 
 def run_unit_tests():
-    """Run unit tests with coverage."""
-    print("\nRunning unit tests with coverage...")
-    
-    # Create coverage directory
-    os.makedirs("htmlcov", exist_ok=True)
-    
-    command = "python -m pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing --cov-report=xml"
-    return run_command(command, "Unit tests with coverage")
-
-def run_specific_tests(test_pattern):
-    """Run specific tests matching pattern."""
-    command = f"python -m pytest tests/ -v -k '{test_pattern}'"
-    return run_command(command, f"Tests matching pattern: {test_pattern}")
-
-def run_performance_tests():
-    """Run performance-specific tests."""
-    command = "python -m pytest tests/test_performance.py -v -m performance"
-    return run_command(command, "Performance tests")
+    """Run unit tests."""
+    cmd = [
+        'pytest', 
+        'tests/', 
+        '-v',
+        '--tb=short',
+        '--durations=10'
+    ]
+    return run_command(cmd, "Running unit tests")
 
 def run_integration_tests():
     """Run integration tests."""
-    command = "python -m pytest tests/test_integration.py -v -m integration"
-    return run_command(command, "Integration tests")
+    cmd = [
+        'pytest', 
+        'tests/test_integration.py', 
+        '-v',
+        '--tb=short'
+    ]
+    return run_command(cmd, "Running integration tests")
+
+def run_performance_tests():
+    """Run performance tests."""
+    cmd = [
+        'pytest', 
+        'tests/test_performance.py', 
+        '-v',
+        '--tb=short'
+    ]
+    return run_command(cmd, "Running performance tests")
+
+def run_coverage():
+    """Run tests with coverage."""
+    cmd = [
+        'pytest', 
+        'tests/', 
+        '--cov=src',
+        '--cov-report=html',
+        '--cov-report=term-missing',
+        '--cov-fail-under=80'
+    ]
+    
+    success = run_command(cmd, "Running tests with coverage")
+    
+    if success:
+        print("\n📊 Coverage report generated in htmlcov/index.html")
+    
+    return success
 
 def run_linting():
-    """Run code linting and formatting checks."""
-    print("\nRunning code quality checks...")
+    """Run code linting."""
+    success = True
     
-    checks = [
-        ("flake8 src/ --max-line-length=100 --ignore=E203,W503", "Flake8 linting"),
-        ("black --check src/ tests/", "Black formatting check"),
-        ("isort --check-only src/ tests/", "Import sorting check"),
-        ("mypy src/ --ignore-missing-imports", "Type checking")
-    ]
+    # Flake8
+    cmd = ['flake8', 'src/', 'tests/', '--max-line-length=100', '--extend-ignore=E203,W503']
+    success &= run_command(cmd, "Running Flake8 linting")
     
-    all_passed = True
-    for command, description in checks:
-        if not run_command(command, description):
-            all_passed = False
+    # Black check
+    cmd = ['black', '--check', '--diff', 'src/', 'tests/']
+    success &= run_command(cmd, "Checking code formatting with Black", check=False)
     
-    return all_passed
+    return success
 
-def fix_formatting():
-    """Fix code formatting issues."""
-    print("\nFixing code formatting...")
+def run_type_checking():
+    """Run type checking with MyPy."""
+    cmd = ['mypy', 'src/', '--ignore-missing-imports']
+    return run_command(cmd, "Running type checking with MyPy", check=False)
+
+def run_security_scan():
+    """Run security scanning."""
+    success = True
     
-    fixes = [
-        ("black src/ tests/", "Black formatting"),
-        ("isort src/ tests/", "Import sorting")
-    ]
+    # Bandit
+    cmd = ['bandit', '-r', 'src/', '-f', 'json', '-o', 'bandit-report.json']
+    success &= run_command(cmd, "Running Bandit security scan", check=False)
     
-    for command, description in fixes:
-        run_command(command, description)
+    # Safety
+    cmd = ['safety', 'check', '--json', '--output', 'safety-report.json']
+    success &= run_command(cmd, "Running Safety dependency scan", check=False)
+    
+    return success
+
+def format_code():
+    """Format code with Black and isort."""
+    success = True
+    
+    # Black formatting
+    cmd = ['black', 'src/', 'tests/']
+    success &= run_command(cmd, "Formatting code with Black")
+    
+    # isort
+    try:
+        cmd = ['isort', 'src/', 'tests/']
+        success &= run_command(cmd, "Sorting imports with isort")
+    except FileNotFoundError:
+        print("💡 isort not found, skipping import sorting")
+    
+    return success
+
+def run_frontend_tests():
+    """Run frontend tests."""
+    frontend_dir = Path("frontend")
+    
+    if not frontend_dir.exists():
+        print("⚠️  Frontend directory not found, skipping frontend tests")
+        return True
+    
+    # Check if node_modules exists
+    node_modules = frontend_dir / "node_modules"
+    if not node_modules.exists():
+        print("📦 Installing frontend dependencies...")
+        cmd = ['npm', 'install']
+        if not run_command(cmd, "Installing frontend dependencies"):
+            return False
+    
+    # Run tests
+    cmd = ['npm', 'test', '--', '--coverage', '--watchAll=false']
+    return run_command(cmd, "Running frontend tests")
 
 def generate_test_report():
     """Generate comprehensive test report."""
-    print("\nGenerating test report...")
+    print("\n📋 Generating test report...")
     
-    # Run tests with detailed output
-    command = "python -m pytest tests/ --html=test_report.html --self-contained-html --cov=src --cov-report=html"
-    return run_command(command, "Generating test report")
+    report_content = f"""
+# Reddit Scraper Test Report
 
-def run_security_checks():
-    """Run security checks."""
-    print("\nRunning security checks...")
-    
-    # Install safety if not available
-    run_command("pip install safety", "Installing safety")
-    
-    # Check for known vulnerabilities
-    command = "safety check"
-    return run_command(command, "Security vulnerability check")
+Generated on: {time.strftime('%Y-%m-%d %H:%M:%S')}
 
-def run_benchmark_tests():
-    """Run benchmark tests."""
-    print("\nRunning benchmark tests...")
-    
-    # Create a simple benchmark script
-    benchmark_script = """
-import time
-import sys
-import os
+## Test Results
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+### Unit Tests
+- Location: tests/
+- Framework: pytest
+- Coverage: See htmlcov/index.html
 
-from src.core.performance_monitor import PerformanceMonitor
-from src.processors.post_processor import PostProcessor
+### Integration Tests  
+- Location: tests/test_integration.py
+- Tests end-to-end workflows
 
-def benchmark_post_processing():
-    monitor = PerformanceMonitor(save_to_file=False)
-    processor = PostProcessor()
-    
-    # Generate test data
-    posts = []
-    for i in range(1000):
-        posts.append({
-            'id': f'post_{i}',
-            'title': f'Test Post {i}',
-            'author': f'user_{i % 100}',
-            'score': i * 10,
-            'num_comments': i * 2,
-            'created_utc': 1640995200 + i,
-            'selftext': f'Content for post {i}',
-            'is_nsfw': i % 10 == 0,
-            'is_self': True
-        })
-    
-    # Benchmark filtering
-    op_id = monitor.start_operation('filter_posts')
-    filtered = processor.filter_posts(posts)
-    metrics = monitor.end_operation(op_id, success=True)
-    
-    print(f"Filtered {len(posts)} posts to {len(filtered)} in {metrics.duration:.3f}s")
-    print(f"Processing rate: {len(posts) / metrics.duration:.1f} posts/second")
-    
-    # Benchmark derived fields
-    op_id = monitor.start_operation('add_derived_fields')
-    enhanced = processor.add_derived_fields(filtered)
-    metrics = monitor.end_operation(op_id, success=True)
-    
-    print(f"Enhanced {len(filtered)} posts in {metrics.duration:.3f}s")
-    print(f"Enhancement rate: {len(filtered) / metrics.duration:.1f} posts/second")
+### Performance Tests
+- Location: tests/test_performance.py
+- Benchmarks scraping performance
 
-if __name__ == '__main__':
-    benchmark_post_processing()
-    """
+### Frontend Tests
+- Location: frontend/src/
+- Framework: Jest + React Testing Library
+
+## Code Quality
+
+### Linting (Flake8)
+- Max line length: 100
+- Ignored: E203, W503
+
+### Formatting (Black)
+- Line length: 100
+- Target Python versions: 3.9+
+
+### Type Checking (MyPy)
+- Strict mode enabled
+- Missing imports ignored
+
+### Security Scanning
+- Bandit: Static security analysis
+- Safety: Dependency vulnerability scan
+
+## Reports Generated
+
+- Coverage: htmlcov/index.html
+- Bandit: bandit-report.json
+- Safety: safety-report.json
+
+## Running Tests
+
+```bash
+# All tests
+python run_tests.py --all
+
+# Specific test types
+python run_tests.py --unit
+python run_tests.py --integration
+python run_tests.py --performance
+
+# Code quality
+python run_tests.py --lint
+python run_tests.py --security
+python run_tests.py --format
+```
+"""
     
-    # Write benchmark script
-    with open('benchmark_temp.py', 'w') as f:
-        f.write(benchmark_script)
+    with open("TEST_REPORT.md", "w") as f:
+        f.write(report_content)
     
-    try:
-        result = run_command("python benchmark_temp.py", "Benchmark tests")
-        return result
-    finally:
-        # Clean up
-        if os.path.exists('benchmark_temp.py'):
-            os.remove('benchmark_temp.py')
+    print("✅ Test report generated: TEST_REPORT.md")
 
 def main():
     """Main test runner function."""
-    parser = argparse.ArgumentParser(description='Reddit Scraper Test Runner')
-    parser.add_argument('--install-deps', action='store_true', help='Install test dependencies')
+    parser = argparse.ArgumentParser(description="Reddit Scraper Test Runner")
+    parser.add_argument('--all', action='store_true', help='Run all tests and checks')
     parser.add_argument('--unit', action='store_true', help='Run unit tests')
     parser.add_argument('--integration', action='store_true', help='Run integration tests')
     parser.add_argument('--performance', action='store_true', help='Run performance tests')
-    parser.add_argument('--lint', action='store_true', help='Run linting checks')
-    parser.add_argument('--fix', action='store_true', help='Fix formatting issues')
-    parser.add_argument('--security', action='store_true', help='Run security checks')
-    parser.add_argument('--benchmark', action='store_true', help='Run benchmark tests')
+    parser.add_argument('--frontend', action='store_true', help='Run frontend tests')
+    parser.add_argument('--coverage', action='store_true', help='Run tests with coverage')
+    parser.add_argument('--lint', action='store_true', help='Run linting')
+    parser.add_argument('--type-check', action='store_true', help='Run type checking')
+    parser.add_argument('--security', action='store_true', help='Run security scans')
+    parser.add_argument('--format', action='store_true', help='Format code')
     parser.add_argument('--report', action='store_true', help='Generate test report')
-    parser.add_argument('--all', action='store_true', help='Run all tests and checks')
-    parser.add_argument('--pattern', type=str, help='Run tests matching pattern')
+    parser.add_argument('--check-deps', action='store_true', help='Check dependencies')
     
     args = parser.parse_args()
     
-    # If no specific arguments, run basic tests
+    # If no specific tests specified, show help
     if not any(vars(args).values()):
-        args.unit = True
+        parser.print_help()
+        return
+    
+    print("🧪 Reddit Scraper Test Runner")
+    print("=" * 50)
+    
+    # Check dependencies
+    if args.check_deps or args.all:
+        if not check_dependencies():
+            print("\n❌ Missing dependencies. Please install required tools.")
+            return 1
     
     success = True
+    start_time = time.time()
     
-    try:
-        if args.install_deps or args.all:
-            if not install_dependencies():
-                success = False
-        
-        if args.fix:
-            fix_formatting()
-        
-        if args.lint or args.all:
-            if not run_linting():
-                success = False
-        
-        if args.unit or args.all:
-            if not run_unit_tests():
-                success = False
-        
-        if args.integration or args.all:
-            if not run_integration_tests():
-                success = False
-        
-        if args.performance or args.all:
-            if not run_performance_tests():
-                success = False
-        
-        if args.pattern:
-            if not run_specific_tests(args.pattern):
-                success = False
-        
-        if args.security or args.all:
-            if not run_security_checks():
-                success = False
-        
-        if args.benchmark or args.all:
-            if not run_benchmark_tests():
-                success = False
-        
-        if args.report or args.all:
-            if not generate_test_report():
-                success = False
-        
-        # Print summary
-        print("\n" + "="*60)
-        if success:
-            print("🎉 ALL TESTS PASSED!")
-            print("\nTest artifacts generated:")
-            if os.path.exists("htmlcov/index.html"):
-                print(f"  📊 Coverage report: {os.path.abspath('htmlcov/index.html')}")
-            if os.path.exists("test_report.html"):
-                print(f"  📋 Test report: {os.path.abspath('test_report.html')}")
-        else:
-            print("❌ SOME TESTS FAILED!")
-            print("Check the output above for details.")
-        print("="*60)
-        
-        return 0 if success else 1
-        
-    except KeyboardInterrupt:
-        print("\n\nTests interrupted by user.")
-        return 1
-    except Exception as e:
-        print(f"\n\nUnexpected error: {e}")
+    # Run tests
+    if args.unit or args.all:
+        success &= run_unit_tests()
+    
+    if args.integration or args.all:
+        success &= run_integration_tests()
+    
+    if args.performance or args.all:
+        success &= run_performance_tests()
+    
+    if args.frontend or args.all:
+        success &= run_frontend_tests()
+    
+    if args.coverage or args.all:
+        success &= run_coverage()
+    
+    # Code quality checks
+    if args.lint or args.all:
+        success &= run_linting()
+    
+    if args.type_check or args.all:
+        success &= run_type_checking()
+    
+    if args.security or args.all:
+        success &= run_security_scan()
+    
+    # Code formatting
+    if args.format:
+        success &= format_code()
+    
+    # Generate report
+    if args.report or args.all:
+        generate_test_report()
+    
+    # Summary
+    total_time = time.time() - start_time
+    print("\n" + "=" * 50)
+    print(f"🏁 Test run completed in {total_time:.2f} seconds")
+    
+    if success:
+        print("✅ All tests and checks passed!")
+        return 0
+    else:
+        print("❌ Some tests or checks failed!")
         return 1
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

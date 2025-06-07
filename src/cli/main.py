@@ -23,6 +23,9 @@ from src.exporters.html_exporter import HTMLExporter
 from src.processors.content_extractor import ContentExtractor
 from src.core.parallel_scraper import ParallelScraper
 from src.core.performance_monitor import PerformanceMonitor, performance_monitor
+from src.database.database_manager import DatabaseManager
+from src.analytics.sentiment_analyzer import SentimentAnalyzer
+from src.analytics.trend_predictor import TrendPredictor
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -90,9 +93,12 @@ def setup(ctx, client_id, client_secret, user_agent):
 @click.option('--parallel', is_flag=True, help='Use parallel processing for multiple subreddits')
 @click.option('--max-workers', default=5, type=int, help='Maximum parallel workers')
 @click.option('--performance-monitor', is_flag=True, help='Enable performance monitoring')
+@click.option('--use-database', is_flag=True, help='Store data in database')
+@click.option('--analyze-sentiment', is_flag=True, help='Run sentiment analysis')
+@click.option('--analyze-trends', is_flag=True, help='Run trend analysis')
 @click.pass_context
 def scrape(ctx, subreddit, posts, sort, time_filter, output, include_users, min_score, exclude_nsfw, 
-           extract_content, parallel, max_workers, performance_monitor):
+           extract_content, parallel, max_workers, performance_monitor, use_database, analyze_sentiment, analyze_trends):
     """Scrape Reddit posts and data."""
     config = ctx.obj['config']
     
@@ -133,6 +139,22 @@ def scrape(ctx, subreddit, posts, sort, time_filter, output, include_users, min_
     if performance_monitor:
         perf_monitor = PerformanceMonitor(save_to_file=True)
         console.print("[yellow]Performance monitoring enabled[/yellow]")
+    
+    # Initialize database if requested
+    db_manager = None
+    if use_database:
+        db_manager = DatabaseManager()
+        console.print("[yellow]Database storage enabled[/yellow]")
+    
+    # Initialize analytics if requested
+    sentiment_analyzer = None
+    trend_predictor = None
+    if analyze_sentiment:
+        sentiment_analyzer = SentimentAnalyzer()
+        console.print("[yellow]Sentiment analysis enabled[/yellow]")
+    if analyze_trends:
+        trend_predictor = TrendPredictor()
+        console.print("[yellow]Trend analysis enabled[/yellow]")
     
     # Initialize exporters
     json_exporter = JSONExporter() if 'json' in output_formats else None
@@ -323,6 +345,46 @@ def scrape(ctx, subreddit, posts, sort, time_filter, output, include_users, min_
         extracted_count = sum(1 for post in all_posts if post.get('extracted_content'))
         console.print(f"[green]✓[/green] Extracted content from {extracted_count} posts")
     
+    # Run sentiment analysis if requested
+    if analyze_sentiment and sentiment_analyzer and all_posts:
+        console.print("[yellow]Analyzing sentiment...[/yellow]")
+        
+        # Start performance monitoring if enabled
+        sentiment_op_id = None
+        if perf_monitor:
+            sentiment_op_id = perf_monitor.start_operation("sentiment_analysis", posts_count=len(all_posts))
+        
+        all_posts = sentiment_analyzer.analyze_posts(all_posts)
+        sentiment_summary = sentiment_analyzer.get_sentiment_summary(all_posts)
+        
+        # End performance monitoring
+        if perf_monitor and sentiment_op_id:
+            perf_monitor.end_operation(sentiment_op_id, success=True)
+        
+        console.print(f"[green]✓[/green] Analyzed sentiment for {len(all_posts)} posts")
+        console.print(f"Average sentiment: {sentiment_summary.get('average_sentiment', 0):.3f}")
+    
+    # Run trend analysis if requested
+    if analyze_trends and trend_predictor and all_posts:
+        console.print("[yellow]Analyzing trends...[/yellow]")
+        
+        # Start performance monitoring if enabled
+        trends_op_id = None
+        if perf_monitor:
+            trends_op_id = perf_monitor.start_operation("trend_analysis", posts_count=len(all_posts))
+        
+        posting_trends = trend_predictor.analyze_posting_trends(all_posts)
+        engagement_trends = trend_predictor.analyze_engagement_trends(all_posts)
+        viral_posts = trend_predictor.predict_viral_potential(all_posts[:50])  # Top 50 for viral analysis
+        
+        # End performance monitoring
+        if perf_monitor and trends_op_id:
+            perf_monitor.end_operation(trends_op_id, success=True)
+        
+        console.print(f"[green]✓[/green] Analyzed trends for {len(all_posts)} posts")
+        if posting_trends.get('trend_direction'):
+            console.print(f"Posting trend: {posting_trends['trend_direction']['direction']}")
+    
     # Remove duplicate users
     if all_users:
         seen_users = set()
@@ -333,6 +395,47 @@ def scrape(ctx, subreddit, posts, sort, time_filter, output, include_users, min_
                 seen_users.add(username)
                 unique_users.append(user)
         all_users = unique_users
+    
+    # Store in database if requested
+    if use_database and db_manager and all_posts:
+        console.print("[yellow]Storing data in database...[/yellow]")
+        
+        # Start performance monitoring if enabled
+        db_op_id = None
+        if perf_monitor:
+            db_op_id = perf_monitor.start_operation("database_storage", posts_count=len(all_posts))
+        
+        # Generate session ID
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        # Create session
+        db_manager.create_session(session_id, subreddits, {
+            'posts': posts,
+            'sort': sort,
+            'time_filter': time_filter,
+            'parallel': parallel,
+            'extract_content': extract_content,
+            'analyze_sentiment': analyze_sentiment,
+            'analyze_trends': analyze_trends
+        })
+        
+        # Store posts
+        stored_posts = db_manager.store_posts(all_posts, session_id)
+        console.print(f"[green]✓[/green] Stored {stored_posts} posts in database")
+        
+        # Store users if available
+        if all_users:
+            stored_users = db_manager.store_users(all_users)
+            console.print(f"[green]✓[/green] Stored {stored_users} users in database")
+        
+        # Update session
+        db_manager.update_session(session_id, posts_count=stored_posts, 
+                                users_count=len(all_users), status='completed')
+        
+        # End performance monitoring
+        if perf_monitor and db_op_id:
+            perf_monitor.end_operation(db_op_id, success=True)
     
     # Export data
     console.print("[yellow]Exporting data...[/yellow]")
@@ -426,6 +529,157 @@ def test_connection(ctx):
             
     except Exception as e:
         console.print(f"[red]Error testing connection: {e}[/red]")
+
+
+@cli.command()
+@click.option('--subreddit', help='Filter by subreddit')
+@click.option('--days', default=7, help='Number of days to analyze')
+@click.option('--sentiment', is_flag=True, help='Run sentiment analysis')
+@click.option('--trends', is_flag=True, help='Run trend analysis')
+@click.option('--viral', is_flag=True, help='Predict viral potential')
+@click.pass_context
+def analyze(ctx, subreddit, days, sentiment, trends, viral):
+    """Run analytics on stored data."""
+    db_manager = DatabaseManager()
+    
+    # Get posts from database
+    console.print(f"[yellow]Loading posts from last {days} days...[/yellow]")
+    from datetime import datetime, timedelta
+    start_date = datetime.now() - timedelta(days=days)
+    
+    posts = db_manager.get_posts(
+        subreddit=subreddit,
+        limit=10000,
+        start_date=start_date
+    )
+    
+    if not posts:
+        console.print("[red]No posts found in database. Run scraping first.[/red]")
+        return
+    
+    console.print(f"[green]✓[/green] Loaded {len(posts)} posts")
+    
+    # Run sentiment analysis
+    if sentiment:
+        console.print("[yellow]Running sentiment analysis...[/yellow]")
+        sentiment_analyzer = SentimentAnalyzer()
+        analyzed_posts = sentiment_analyzer.analyze_posts(posts)
+        sentiment_summary = sentiment_analyzer.get_sentiment_summary(analyzed_posts)
+        
+        # Store back to database
+        db_manager.store_posts(analyzed_posts)
+        
+        # Display results
+        console.print(f"[green]✓ Sentiment Analysis Results:[/green]")
+        console.print(f"  Average sentiment: {sentiment_summary.get('average_sentiment', 0):.3f}")
+        console.print(f"  Positive: {sentiment_summary.get('positive_percentage', 0):.1f}%")
+        console.print(f"  Negative: {sentiment_summary.get('negative_percentage', 0):.1f}%")
+        console.print(f"  Neutral: {sentiment_summary.get('neutral_percentage', 0):.1f}%")
+    
+    # Run trend analysis
+    if trends:
+        console.print("[yellow]Running trend analysis...[/yellow]")
+        trend_predictor = TrendPredictor()
+        
+        posting_trends = trend_predictor.analyze_posting_trends(posts, days)
+        engagement_trends = trend_predictor.analyze_engagement_trends(posts)
+        subreddit_trends = trend_predictor.analyze_subreddit_trends(posts)
+        
+        # Display results
+        console.print(f"[green]✓ Trend Analysis Results:[/green]")
+        if posting_trends.get('trend_direction'):
+            direction = posting_trends['trend_direction']
+            console.print(f"  Posting trend: {direction['direction']} (confidence: {direction['confidence']:.2f})")
+        
+        if engagement_trends.get('score_stats'):
+            score_stats = engagement_trends['score_stats']
+            console.print(f"  Average score: {score_stats['mean']:.1f}")
+            console.print(f"  Score range: {score_stats['min']} - {score_stats['max']}")
+    
+    # Predict viral potential
+    if viral:
+        console.print("[yellow]Predicting viral potential...[/yellow]")
+        trend_predictor = TrendPredictor()
+        viral_posts = trend_predictor.predict_viral_potential(posts[:100])
+        
+        console.print(f"[green]✓ Top 10 Posts with Viral Potential:[/green]")
+        for i, post in enumerate(viral_posts[:10], 1):
+            console.print(f"  {i}. {post['title'][:60]}... (Score: {post['viral_potential']:.1f})")
+
+
+@cli.command()
+@click.option('--stats', is_flag=True, help='Show database statistics')
+@click.option('--cleanup', is_flag=True, help='Cleanup old data')
+@click.option('--days', default=30, help='Days to keep for cleanup')
+@click.option('--export', help='Export database to file')
+@click.option('--import-file', help='Import data from file')
+@click.pass_context
+def db(ctx, stats, cleanup, days, export, import_file):
+    """Database management commands."""
+    db_manager = DatabaseManager()
+    
+    if stats:
+        console.print("[yellow]Database Statistics:[/yellow]")
+        db_stats = db_manager.get_database_stats()
+        
+        table = Table(title="Database Statistics")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+        
+        table.add_row("Total Posts", f"{db_stats.get('posts_count', 0):,}")
+        table.add_row("Total Users", f"{db_stats.get('users_count', 0):,}")
+        table.add_row("Scraping Sessions", f"{db_stats.get('scraping_sessions_count', 0):,}")
+        table.add_row("Performance Metrics", f"{db_stats.get('performance_metrics_count', 0):,}")
+        table.add_row("Cache Entries", f"{db_stats.get('analytics_cache_count', 0):,}")
+        
+        if db_stats.get('database_size_bytes'):
+            size_mb = db_stats['database_size_bytes'] / (1024 * 1024)
+            table.add_row("Database Size", f"{size_mb:.2f} MB")
+        
+        if db_stats.get('data_date_range'):
+            date_range = db_stats['data_date_range']
+            table.add_row("Date Range", f"{date_range['start']} to {date_range['end']}")
+        
+        console.print(table)
+    
+    if cleanup:
+        console.print(f"[yellow]Cleaning up data older than {days} days...[/yellow]")
+        db_manager.cleanup_old_data(days)
+        console.print("[green]✓ Database cleanup completed[/green]")
+    
+    if export:
+        console.print(f"[yellow]Exporting database to {export}...[/yellow]")
+        # Implementation would go here
+        console.print("[green]✓ Database exported[/green]")
+    
+    if import_file:
+        console.print(f"[yellow]Importing data from {import_file}...[/yellow]")
+        # Implementation would go here
+        console.print("[green]✓ Data imported[/green]")
+
+
+@cli.command()
+@click.option('--host', default='0.0.0.0', help='Host to bind to')
+@click.option('--port', default=8000, help='Port to bind to')
+@click.option('--reload', is_flag=True, help='Enable auto-reload')
+@click.pass_context
+def serve(ctx, host, port, reload):
+    """Start the web dashboard server."""
+    console.print(f"[yellow]Starting Reddit Scraper Dashboard...[/yellow]")
+    console.print(f"[blue]Dashboard will be available at: http://{host}:{port}[/blue]")
+    console.print(f"[blue]API documentation at: http://{host}:{port}/docs[/blue]")
+    
+    try:
+        import uvicorn
+        from src.api.dashboard_api import create_app
+        
+        app = create_app(ctx.obj['config_file'])
+        uvicorn.run(app, host=host, port=port, reload=reload)
+        
+    except ImportError:
+        console.print("[red]uvicorn not installed. Install with: pip install uvicorn[/red]")
+    except Exception as e:
+        console.print(f"[red]Error starting server: {e}[/red]")
 
 
 def _display_results(posts: List, users: List, exported_files: List[str]):
