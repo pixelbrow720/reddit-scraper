@@ -1,0 +1,30 @@
+# Reddit Scraper Configuration Example
+# Copy this file to settings.yaml and fill in your Reddit API credentials
+
+reddit_api:
+  # Get these from https://www.reddit.com/prefs/apps
+  client_id: "YOUR_REDDIT_CLIENT_ID"
+  client_secret: "YOUR_REDDIT_CLIENT_SECRET"
+  user_agent: "RedditScraper/1.0 by /u/yourusername"
+
+scraping:
+  rate_limit: 1.0  # requests per second (recommended: 0.5-2.0)
+  max_retries: 3   # number of retry attempts
+  timeout: 30      # request timeout in seconds
+  concurrent_workers: 5  # for future parallel processing
+
+output:
+  formats: ["json", "csv"]  # available: json, csv, html
+  include_metadata: true
+  compress_output: false   # gzip compression for large files
+
+filtering:
+  min_score: 1           # minimum post score
+  max_age_days: 365      # maximum post age in days
+  exclude_nsfw: true     # exclude NSFW content
+  exclude_deleted: true  # exclude deleted posts
+
+logging:
+  level: "INFO"          # DEBUG, INFO, WARNING, ERROR
+  file: "logs/scraper.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

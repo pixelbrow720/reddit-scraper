@@ -1,0 +1,10 @@
+praw
+requests
+beautifulsoup4
+pandas
+click
+rich
+tqdm
+pyyaml
+lxml
+python-dateutil
