@@ -9,28 +9,37 @@ import os
 from contextlib import contextmanager
 import threading
 
+from .connection_pool import SQLiteConnectionPool, DatabaseTransaction, BatchProcessor
+
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
     """Database manager for Reddit scraper data."""
     
-    def __init__(self, db_path: str = "data/reddit_scraper.db"):
+    def __init__(self, db_path: str = "data/reddit_scraper.db", max_connections: int = 10):
         """Initialize database manager.
         
         Args:
             db_path: Path to SQLite database file
+            max_connections: Maximum number of database connections
         """
         self.db_path = db_path
-        self.lock = threading.Lock()
         
-        # Create data directory if it doesn't exist
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        # Use connection pool for better concurrency
+        self.connection_pool = SQLiteConnectionPool(
+            db_path=db_path,
+            max_connections=max_connections,
+            check_same_thread=False  # Allow sharing connections between threads
+        )
+        
+        # Batch processor for efficient operations
+        self.batch_processor = BatchProcessor(self.connection_pool)
         
         # Initialize database
         self._init_database()
         
-        logger.info(f"Database manager initialized with database: {db_path}")
+        logger.info(f"Database manager initialized with database: {db_path}, max_connections: {max_connections}")
     
     def _init_database(self):
         """Initialize database tables."""
@@ -149,13 +158,8 @@ class DatabaseManager:
     @contextmanager
     def get_connection(self):
         """Get database connection with automatic cleanup."""
-        with self.lock:
-            conn = sqlite3.connect(self.db_path, timeout=30.0)
-            conn.row_factory = sqlite3.Row  # Enable dict-like access
-            try:
-                yield conn
-            finally:
-                conn.close()
+        with self.connection_pool.get_connection() as conn:
+            yield conn
     
     def store_posts(self, posts: List[Dict[str, Any]], session_id: str = None) -> int:
         """Store posts in database.

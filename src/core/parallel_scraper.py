@@ -12,6 +12,7 @@ import multiprocessing as mp
 
 from .reddit_client import RedditClient
 from .rate_limiter import RateLimiter
+from .thread_safe_rate_limiter import ThreadSafeRateLimiter, ProcessSafeRateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +56,11 @@ class ParallelScraper:
         self.rate_limit = rate_limit
         self.use_processes = use_processes
         
-        # Global rate limiter
-        self.global_rate_limiter = RateLimiter(rate_limit)
+        # Global rate limiter - use appropriate type based on execution mode
+        if use_processes:
+            self.global_rate_limiter = ProcessSafeRateLimiter(rate_limit)
+        else:
+            self.global_rate_limiter = ThreadSafeRateLimiter(rate_limit)
         
         # Results storage
         self.results: List[ScrapeResult] = []
