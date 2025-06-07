@@ -222,3 +222,4 @@ cache/
 # Test files
 test_output/
 test_data/
+blueprint.md
