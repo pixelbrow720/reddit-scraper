@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Grid,
   Card,
@@ -34,7 +34,6 @@ import {
   Refresh,
   Settings,
   CloudDownload,
-  Timeline,
   Delete,
   Visibility,
 } from '@mui/icons-material';
@@ -62,18 +61,7 @@ const Scraping = () => {
     max_workers: 5,
   });
 
-  useEffect(() => {
-    fetchSessions();
-    
-    // Subscribe to WebSocket updates
-    const unsubscribe = websocketService.subscribe('*', handleWebSocketMessage);
-    
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
       const data = await apiService.getAllSessions();
       setSessions(data);
@@ -81,9 +69,9 @@ const Scraping = () => {
     } catch (err) {
       setError(err.message);
     }
-  };
+  }, []);
 
-  const handleWebSocketMessage = (data) => {
+  const handleWebSocketMessage = useCallback((data) => {
     switch (data.type) {
       case 'session_started':
         setSuccess(`Scraping session started for: ${data.subreddits.join(', ')}`);
@@ -103,7 +91,18 @@ const Scraping = () => {
       default:
         break;
     }
-  };
+  }, [fetchSessions]);
+
+  useEffect(() => {
+    fetchSessions();
+    
+    // Subscribe to WebSocket updates
+    const unsubscribe = websocketService.subscribe('*', handleWebSocketMessage);
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [fetchSessions, handleWebSocketMessage]);
 
   const handleStartScraping = async () => {
     try {
@@ -170,6 +169,26 @@ const Scraping = () => {
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString();
+  };
+
+  const parseSubreddits = (subredditsData) => {
+    try {
+      if (typeof subredditsData === 'string') {
+        // Try to parse as JSON first
+        try {
+          return JSON.parse(subredditsData);
+        } catch {
+          // If JSON parsing fails, treat as comma-separated string
+          return subredditsData.split(',').map(s => s.trim()).filter(s => s);
+        }
+      }
+      if (Array.isArray(subredditsData)) {
+        return subredditsData;
+      }
+      return [];
+    } catch {
+      return [];
+    }
   };
 
   return (
@@ -338,7 +357,7 @@ const Scraping = () => {
               </Box>
             ) : (
               <List>
-                {sessions.slice(0, 10).map((session, index) => (
+                {sessions.slice(0, 10).map((session) => (
                   <ListItem
                     key={session.session_id}
                     sx={{
@@ -365,7 +384,7 @@ const Scraping = () => {
                       secondary={
                         <Box>
                           <Typography variant="body2" color="text.secondary">
-                            Subreddits: {JSON.parse(session.subreddits || '[]').join(', ')}
+                            Subreddits: {parseSubreddits(session.subreddits || '[]').join(', ')}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
                             Posts: {session.posts_count || 0} | Users: {session.users_count || 0}

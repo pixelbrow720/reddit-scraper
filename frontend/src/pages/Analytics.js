@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Grid,
   Card,
@@ -22,20 +22,14 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
 } from '@mui/material';
 import {
-  Analytics as AnalyticsIcon,
-  TrendingUp,
-  Sentiment,
-  Timeline,
   Refresh,
-  Download,
   Psychology,
   Whatshot,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
-import { Line, Bar, Pie, Radar } from 'react-chartjs-2';
+import { Line, Bar, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -47,7 +41,6 @@ import {
   Legend,
   ArcElement,
   BarElement,
-  RadialLinearScale,
 } from 'chart.js';
 
 import { apiService } from '../services/api';
@@ -62,8 +55,7 @@ ChartJS.register(
   ChartTooltip,
   Legend,
   ArcElement,
-  BarElement,
-  RadialLinearScale
+  BarElement
 );
 
 const Analytics = () => {
@@ -83,13 +75,7 @@ const Analytics = () => {
     min_score: null,
   });
 
-  useEffect(() => {
-    // Load initial analytics
-    runSentimentAnalysis();
-    runTrendAnalysis();
-  }, []);
-
-  const runSentimentAnalysis = async () => {
+  const runSentimentAnalysis = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -105,9 +91,9 @@ const Analytics = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [analysisConfig]);
 
-  const runTrendAnalysis = async () => {
+  const runTrendAnalysis = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -119,7 +105,13 @@ const Analytics = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [analysisConfig]);
+
+  useEffect(() => {
+    // Load initial analytics
+    runSentimentAnalysis();
+    runTrendAnalysis();
+  }, [runSentimentAnalysis, runTrendAnalysis]);
 
   const handleRunAnalysis = () => {
     if (activeTab === 0) {
@@ -340,7 +332,7 @@ const Analytics = () => {
                 iconPosition="start"
               />
               <Tab
-                icon={<Timeline />}
+                icon={<Whatshot />}
                 label="Trend Analysis"
                 iconPosition="start"
               />
@@ -645,7 +637,7 @@ const Analytics = () => {
                   color: 'text.secondary',
                 }}
               >
-                <Timeline sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
+                <Whatshot sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
                 <Typography variant="h6" gutterBottom>
                   No trend analysis data
                 </Typography>

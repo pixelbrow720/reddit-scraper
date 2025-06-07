@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Grid,
   Card,
@@ -15,16 +15,13 @@ import {
   TrendingUp,
   TrendingDown,
   CloudDownload,
-  Analytics,
-  Storage,
   Refresh,
-  Timeline,
   People,
   Forum,
   ThumbUp,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
-import { Line, Doughnut, Bar } from 'react-chartjs-2';
+import { Line, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -35,7 +32,6 @@ import {
   Tooltip as ChartTooltip,
   Legend,
   ArcElement,
-  BarElement,
 } from 'chart.js';
 
 import { apiService } from '../services/api';
@@ -50,8 +46,7 @@ ChartJS.register(
   Title,
   ChartTooltip,
   Legend,
-  ArcElement,
-  BarElement
+  ArcElement
 );
 
 const Dashboard = () => {
@@ -61,22 +56,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchDashboardData();
-    
-    // Subscribe to WebSocket updates
-    const unsubscribe = websocketService.subscribe('*', handleWebSocketMessage);
-    
-    // Set up periodic refresh
-    const interval = setInterval(fetchDashboardData, 60000); // Refresh every minute
-
-    return () => {
-      unsubscribe();
-      clearInterval(interval);
-    };
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -95,9 +75,9 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleWebSocketMessage = (data) => {
+  const handleWebSocketMessage = useCallback((data) => {
     switch (data.type) {
       case 'session_started':
       case 'session_completed':
@@ -110,10 +90,45 @@ const Dashboard = () => {
       default:
         break;
     }
-  };
+  }, [fetchDashboardData]);
+
+  useEffect(() => {
+    fetchDashboardData();
+    
+    // Subscribe to WebSocket updates
+    const unsubscribe = websocketService.subscribe('*', handleWebSocketMessage);
+    
+    // Set up periodic refresh
+    const interval = setInterval(fetchDashboardData, 60000); // Refresh every minute
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [fetchDashboardData, handleWebSocketMessage]);
 
   const handleRefresh = () => {
     fetchDashboardData();
+  };
+
+  const parseSubreddits = (subredditsData) => {
+    try {
+      if (typeof subredditsData === 'string') {
+        // Try to parse as JSON first
+        try {
+          return JSON.parse(subredditsData);
+        } catch {
+          // If JSON parsing fails, treat as comma-separated string
+          return subredditsData.split(',').map(s => s.trim()).filter(s => s);
+        }
+      }
+      if (Array.isArray(subredditsData)) {
+        return subredditsData;
+      }
+      return [];
+    } catch {
+      return [];
+    }
   };
 
   // Chart configurations
@@ -427,7 +442,7 @@ const Dashboard = () => {
                         </Box>
                         
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                          Subreddits: {JSON.parse(session.subreddits || '[]').join(', ')}
+                          Subreddits: {parseSubreddits(session.subreddits || '[]').join(', ')}
                         </Typography>
                         
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

@@ -29,7 +29,7 @@ html5lib>=1.1
 psutil>=5.9.5
 
 # Database
-sqlite3  # Built into Python
+# sqlite3  
 
 # API and web framework
 fastapi>=0.103.0
@@ -48,7 +48,7 @@ aiofiles>=23.2.1
 pydantic>=2.3.0
 
 # CORS middleware
-python-cors>=1.7.0
+# python-cors
 
 # Environment variables
 python-dotenv>=1.0.0

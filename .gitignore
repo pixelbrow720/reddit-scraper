@@ -223,3 +223,4 @@ cache/
 test_output/
 test_data/
 blueprint.md
+node_modules/
