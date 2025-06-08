@@ -542,6 +542,72 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## 📋 **Project Blueprint**
+
+### Project Overview
+
+#### Tujuan
+Membuat tool scraping Reddit berbasis terminal untuk mengumpulkan posts, konten, dan user profiles dari subreddit tertentu atau secara general untuk keperluan analisis sentimen, penelitian, dan analisa tren.
+
+#### Target Output
+- **Volume**: Ratusan ribu hingga jutaan posts
+- **Format**: JSON, CSV, HTML
+- **Sifat**: One-time scraping
+- **Interface**: Terminal/Command Line
+
+### System Architecture
+
+#### Core Components
+```
+Reddit Scraper
+├── Core Engine
+│   ├── Reddit API Client
+│   ├── Web Scraper (Fallback)
+│   └── Rate Limiter
+├── Data Processing
+│   ├── Post Processor
+│   ├── User Profile Processor
+│   └── Content Extractor
+├── Storage Manager
+│   ├── JSON Exporter
+│   ├── CSV Exporter
+│   └── HTML Generator
+└── CLI Interface
+    ├── Configuration Manager
+    ├── Progress Monitor
+    └── Error Handler
+```
+
+### Implementation Plan
+
+#### Phase 1: Core Setup
+- Setup project structure
+- Implement Reddit API client
+- Basic CLI interface
+- Configuration management
+- Rate limiting mechanism
+
+#### Phase 2: Data Collection
+- Post scraping functionality
+- User profile collection
+- Content extraction (links)
+- Error handling & logging
+- Basic filtering options
+
+#### Phase 3: Data Processing
+- JSON export functionality
+- CSV export functionality
+- HTML report generation
+- Data validation
+- Duplicate detection
+
+#### Phase 4: Enhancement
+- Advanced filtering options
+- Parallel processing
+- Progress monitoring
+- Performance optimization
+- Testing & documentation
+
 ## 🙏 **Acknowledgments**
 
 - **PRAW** - Python Reddit API Wrapper
